@@ -1,15 +1,15 @@
 {
   "name": "my-app",
   "version": "0.1.0",
-  "homepage": "https://su-my.github.io/Test-page/",
+  "homepage": ".",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d .next"
+    "predeploy": "next build && touch out/.nojekyll",
+    "deploy": "gh-pages -d out"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",
