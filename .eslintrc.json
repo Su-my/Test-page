@@ -1,3 +1,7 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  // 标记 有可能需要关掉
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "off"
+  }
 }
