@@ -5,7 +5,7 @@ import { Button, Card, Typography, Row, Col } from 'antd';
 import 'antd/dist/reset.css'; // 引入 Ant Design 样式
 import ReactECharts from 'echarts-for-react';
 import './styles.css';
-import Item from 'antd/es/list/Item';
+// import Item from 'antd/es/list/Item';
 
 const { Title, Paragraph } = Typography;
 
@@ -33,7 +33,7 @@ const Bandit = () => {
 
     // 计算每个臂的平均奖励和标准误差
     const avgRewards = rewards.map((reward, i) => (counts[i] > 0 ? reward / counts[i] : 0));
-    const standardErrors = rewards.map((reward, i) => (counts[i] > 0 ? Math.sqrt((avgRewards[i] * (1 - avgRewards[i])) / counts[i]) : 0));
+    // const standardErrors = rewards.map((reward, i) => (counts[i] > 0 ? Math.sqrt((avgRewards[i] * (1 - avgRewards[i])) / counts[i]) : 0));
 
     // 配置 ECharts 图表选项
     const getOption = () => ({
