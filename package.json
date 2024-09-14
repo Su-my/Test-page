@@ -1,7 +1,7 @@
 {
   "name": "my-app",
   "version": "0.1.0",
-  "homepage": "https://github.com/Su-my/Test-page",
+  "homepage": "https://su-my.github.io/Test-page/",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d .next --dotfiles --exclude .next/cache"
+    "deploy": "gh-pages -d .next"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",

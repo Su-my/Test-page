@@ -2029,7 +2029,7 @@ get-tsconfig@^4.7.5:
 
 gh-pages@^6.1.1:
   version "6.1.1"
-  resolved "https://registry.npmmirror.com/gh-pages/-/gh-pages-6.1.1.tgz"
+  resolved "https://registry.npmmirror.com/gh-pages/-/gh-pages-6.1.1.tgz#e80af927a081cb480657fde5a0b87ea2e77d6c74"
   integrity sha512-upnohfjBwN5hBP9w2dPE7HO5JJTHzSGMV1JrLrHvNuqmjoYHg6TBrCcnEoorjG/e0ejbuvnwyKMdTyM40PEByw==
   dependencies:
     async "^3.2.4"
