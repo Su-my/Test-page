@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Button, Card, Typography, Row, Col } from 'antd';
+import { Button, Card, Typography, Row, Col, Divider, Table, message} from 'antd';
 import 'antd/dist/reset.css'; // 引入 Ant Design 样式
 import ReactECharts from 'echarts-for-react';
 import './styles.css';
@@ -13,6 +13,7 @@ const NUM_ARMS = 3;
 // const REWARDS = [0.3, 0.5, 0.7]; // 实际中奖概率
 const ExpectedRewards = [10, 20, 30]; // 期望奖励
 const variance = [5, 5, 5]; // 方差
+const Max_STEP = 30; // 最大步数
 
 function sampleReward(mean: number, stdDev: number): number {
     // Box-Muller transform to generate a random number from a normal distribution
@@ -28,16 +29,60 @@ function sampleReward(mean: number, stdDev: number): number {
 
 
 const Bandit = () => {
-
-
-
     const [rewards, setRewards] = useState(Array(NUM_ARMS).fill(0)); // 每个臂的累计奖励
     // 每个臂奖励的平方之和
     const [rewardsSquareSum, setRewardsSquareSum] = useState(Array(NUM_ARMS).fill(0));
     const [counts, setCounts] = useState(Array(NUM_ARMS).fill(0)); // 每个臂被点击的次数
+    const [rewardMatrix, setRewardMatrix] = useState(Array(NUM_ARMS).fill(0).map(() => Array(Max_STEP).fill(0))); // 每个臂每次点击的奖励
+    const totalCounts = counts.reduce((acc, count) => acc + count, 0);
+    const [rewardTrajectory, setRewardTrajectory] = useState(Array(Max_STEP).fill(0)); // 每次点击的奖励
+
+    const [messageApi, contextHolder] = message.useMessage();
+
+    // 创建表格数据
+    const data = Array.from({ length: totalCounts }, (_, step) => ({
+        key: step + 1,
+        step: (step + 1).toString(),
+        reward: rewardTrajectory[step].toFixed(2) || 0,
+    }));
+
+    // 计算均值
+    const totalReward = rewardTrajectory.reduce((acc, reward) => acc + reward, 0).toFixed(2);
+
+    // 添加均值行
+    data.push({
+        key: totalCounts + 1,
+        step: "Total",
+        reward: totalReward,
+    });
+
+    const columns = [
+        {
+            title: 'Step',
+            dataIndex: 'step',
+            key: 'step',
+        },
+        {
+            title: 'Reward',
+            dataIndex: 'reward',
+            key: 'reward',
+        },
+    ];
 
     const handleArmClick = (armIndex: number) => {
-        const reward = sampleReward(ExpectedRewards[armIndex], variance[armIndex]);
+        if (totalCounts >= Max_STEP) {
+            messageApi.open({
+                type: 'error',
+                content: `已达到最大步数上限 ${Max_STEP}，请点击“Clear output”清除。`,
+            });
+            return;
+        }
+        const reward = rewardMatrix[armIndex][totalCounts];
+        setRewardTrajectory(prevRewardTrajectory => {
+            const newRewardTrajectory = [...prevRewardTrajectory];
+            newRewardTrajectory[totalCounts] = reward;
+            return newRewardTrajectory;
+        });
         console.log(`Arm ${armIndex + 1} Reward: ${reward}`);
 
         setRewards(prevRewards => {
@@ -57,12 +102,29 @@ const Bandit = () => {
         });
     };
 
-    // 计算每个臂的平均奖励和标准误差
-    const avgRewards = rewards.map((reward, i) => (counts[i] > 0 ? reward / counts[i] : 0));
-    // const standardErrors = rewards.map((reward, i) => (counts[i] > 0 ? Math.sqrt((avgRewards[i] * (1 - avgRewards[i])) / counts[i]) : 0));
+    const handleClearOutput = () => {
+        setRewards(Array(NUM_ARMS).fill(0));
+        setRewardsSquareSum(Array(NUM_ARMS).fill(0));
+        setCounts(Array(NUM_ARMS).fill(0));
+        setRewardTrajectory(Array(Max_STEP).fill(0));
+    };
+    
+    const handleStartGame = () => {
+        handleClearOutput();
+        const newRewardMatrix = rewardMatrix.map((armRewards, armIndex) => {
+            return armRewards.map((_, stepIndex) => {
+              return sampleReward(ExpectedRewards[armIndex], variance[armIndex]);
+            });
+          });
+        
+        setRewardMatrix(newRewardMatrix);
+    };
 
     // 配置 ECharts 图表选项
     const getOption = () => {
+        // 计算每个臂的平均奖励
+        const avgRewards = rewards.map((reward, i) => (counts[i] > 0 ? reward / counts[i] : 0));
+
         // 假设每次点击的reward是服从正态分布的
         const standardDeviations = rewards.map((reward, i) => {
             if (counts[i] === 0) {
@@ -87,7 +149,7 @@ const Bandit = () => {
                         //     tooltipContent += `<div><strong>${item.name}</strong>: ${item.value} (Average Reward)</div>`;
                         // }
                         if (item.seriesName === 'Standard Deviation') {
-                            tooltipContent += `<div><strong>${item.name}</strong>: ${item.value[1]} (Mean) ± ${item.value[2]} (Standard Deviation)</div>`;
+                            tooltipContent += `<div><strong>${item.name}</strong>: ${item.value[1].toFixed(2)} (Mean) ± ${item.value[2].toFixed(2)} (Standard Deviation)</div>`;
                         }
                     });
                     return tooltipContent;
@@ -168,43 +230,61 @@ const Bandit = () => {
     };
 
     return (
-        <div className="slot-machine-frame" style={{ padding: '20px 300px' }}>
-            <Title level={1} style={{ /*居中 */ textAlign: 'center' }}>Multi-Armed Bandit</Title>
-            <Row gutter={16}>
-                {Array(NUM_ARMS).fill(null).map((_, i) => (
-                    <Col span={8} key={i}>
-                        <Button
-                            type="primary"
-                            block
-                            className="slot-button"
-                            onClick={() => handleArmClick(i)}
-                            style={{ marginBottom: '10px' }}
-                        >
-                            Arm {i + 1}
+        <div className="slot-machine-frame" style={{ padding: '20px 300px' , display: 'flex', gap: '60px' }}>
+            <div>
+                <Title level={1} style={{ /*居中 */ textAlign: 'center' }}>Multi-Armed Bandit</Title>
+                <Row gutter={16} justify="center">
+                    <Col span={4}>
+                        <Button type="primary" size="large" onClick={handleStartGame}>
+                            Start game
                         </Button>
                     </Col>
-                ))}
-            </Row>
-
-            <div style={{ marginTop: '20px' }}>
-                <Title level={2}>Statistics:</Title>
-                <div style={{ display: 'flex', gap: '10px', overflowX: 'auto' }}>
-                    {rewards.map((reward, i) => (
-                        <Card
-                            key={i}
-                            title={`Arm ${i + 1}`}
-                            style={{ flex: '0 0 auto', width: '300px' }} // 控制每个卡片的宽度
-                        >
-                            <Paragraph>
-                                {counts[i]} pulls, Average reward: {counts[i] > 0 ? (reward / counts[i]).toFixed(2) : 0}
-                            </Paragraph>
-                        </Card>
+                    <Col span={4}>
+                        <Button type="primary" size="large" onClick={handleClearOutput}>
+                            Clear output
+                        </Button>
+                    </Col>
+                </Row>
+                <Divider />
+                <Row gutter={16}>
+                    {Array(NUM_ARMS).fill(null).map((_, i) => (
+                        <Col span={8} key={i}>
+                            <Button
+                                type="primary"
+                                block
+                                className="slot-button"
+                                onClick={() => handleArmClick(i)}
+                                style={{ marginBottom: '10px' }}
+                            >
+                                Arm {i + 1}
+                            </Button>
+                        </Col>
                     ))}
-                </div>
+                </Row>
 
-                <div style={{ marginTop: '30px' }}>
-                    <ReactECharts option={getOption()} />
+                <div style={{ marginTop: '20px' }}>
+                    <Title level={2}>Statistics:</Title>
+                    <div style={{ display: 'flex', gap: '10px', overflowX: 'auto' }}>
+                        {rewards.map((reward, i) => (
+                            <Card
+                                key={i}
+                                title={`Arm ${i + 1}`}
+                                style={{ flex: '0 0 auto', width: '300px' }} // 控制每个卡片的宽度
+                            >
+                                <Paragraph>
+                                    {counts[i]} pulls, Average reward: {counts[i] > 0 ? (reward / counts[i]).toFixed(2) : 0}
+                                </Paragraph>
+                            </Card>
+                        ))}
+                    </div>
+
+                    <div style={{ marginTop: '30px' }}>
+                        <ReactECharts option={getOption()} />
+                    </div>
                 </div>
+            </div>
+            <div>
+                <Table columns={columns} dataSource={data} pagination={false} />
             </div>
         </div>
     );
