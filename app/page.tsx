@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Button, Card, Typography, Row, Col, Table } from 'antd';
+import React, { useState } from 'react';
+import { Button, Card, Typography, Row, Col } from 'antd';
 import 'antd/dist/reset.css'; // 引入 Ant Design 样式
 import ReactECharts from 'echarts-for-react';
 import './styles.css';
@@ -10,7 +10,6 @@ import './styles.css';
 const { Title, Paragraph } = Typography;
 
 const NUM_ARMS = 3;
-const T = 10;
 // const REWARDS = [0.3, 0.5, 0.7]; // 实际中奖概率
 const ExpectedRewards = [10, 20, 30]; // 期望奖励
 const variance = [5, 5, 5]; // 方差
@@ -30,34 +29,6 @@ function sampleReward(mean: number, stdDev: number): number {
 
 const Bandit = () => {
 
-    // 生成提前计算好的T x K的矩阵
-    const [matrixData, setMatrixData] = useState<number[][]>([]);
-
-    useEffect(() => {
-        // 生成提前的样本矩阵
-        const matrix = Array.from({ length: NUM_ARMS }, (_, i) =>
-            Array.from({ length: T }, () => sampleReward(ExpectedRewards[i], variance[i]))
-        );
-        setMatrixData(matrix);
-    }, []);
-
-    // 表格数据和列设置
-    const columns = [
-        { title: "Arm", dataIndex: "arm", key: "arm" },
-        ...Array.from({ length: T }, (_, i) => ({
-            title: `T${i + 1}`,
-            dataIndex: `t${i + 1}`,
-            key: `t${i + 1}`,
-        })),
-    ];
-
-    const dataSource = matrixData.map((row, index) => {
-        const rowData: any = { arm: `Arm ${index + 1}` };
-        row.forEach((value, t) => {
-            rowData[`t${t + 1}`] = value.toFixed(2);
-        });
-        return rowData;
-    });
 
 
     const [rewards, setRewards] = useState(Array(NUM_ARMS).fill(0)); // 每个臂的累计奖励
@@ -234,11 +205,6 @@ const Bandit = () => {
                 <div style={{ marginTop: '30px' }}>
                     <ReactECharts option={getOption()} />
                 </div>
-            </div>
-
-            <div style={{ marginTop: "20px" }}>
-                <Title level={2}>Reward Matrix:</Title>
-                <Table dataSource={dataSource} columns={columns} pagination={false} bordered />
             </div>
         </div>
     );
