@@ -1,19 +1,17 @@
 "use client";
 
-import React, { useState } from 'react';
-import { Button, Card, Typography, Row, Col, Divider, Table, message} from 'antd';
+import React, { useState, useRef, useEffect } from 'react';
+import { Button, Card, Typography, Row, Col, Divider, Table, message, InputNumber, Descriptions, Drawer, Tag} from 'antd';
 import 'antd/dist/reset.css'; // 引入 Ant Design 样式
 import ReactECharts from 'echarts-for-react';
 import './styles.css';
-// import Item from 'antd/es/list/Item';
+import type { DescriptionsProps } from 'antd';
 
 const { Title, Paragraph } = Typography;
 
-const NUM_ARMS = 3;
-// const REWARDS = [0.3, 0.5, 0.7]; // 实际中奖概率
-const ExpectedRewards = [10, 20, 30]; // 期望奖励
-const variance = [5, 5, 5]; // 方差
-const Max_STEP = 30; // 最大步数
+const INIT_NUM_ARMS = 3;
+const INIT_Max_STEP = 30; // 最大步数
+const para_C = 1; // UCB 算法的参数
 
 function sampleReward(mean: number, stdDev: number): number {
     // Box-Muller transform to generate a random number from a normal distribution
@@ -27,53 +25,131 @@ function sampleReward(mean: number, stdDev: number): number {
     return Math.min(Math.max(randNormal, 0), 50);
 }
 
+const getRandomNumber = (min: number, max: number) => Math.random() * (max - min) + min;
+
+const generateExpectedRewardsAndVariance = (numArms: number) => {
+    let ExpectedRewards = [];
+    let maxReward = 0, secondMaxReward = 0;
+
+    // 生成期望奖励
+    while (ExpectedRewards.length < numArms) {
+        const reward = getRandomNumber(10, 40);
+        ExpectedRewards.push(reward);
+        
+        // 维护最大和第二大值
+        if (reward > maxReward) {
+            secondMaxReward = maxReward;
+            maxReward = reward;
+        } else if (reward > secondMaxReward) {
+            secondMaxReward = reward;
+        }
+    }
+
+    // 确保最大和第二大之间的差值在 0.5 - 1 之间
+    if (maxReward - secondMaxReward < 1 || maxReward - secondMaxReward > 2) {
+        const targetDifference = getRandomNumber(1, 2);
+        ExpectedRewards[ExpectedRewards.indexOf(maxReward)] = secondMaxReward + targetDifference;
+    }
+
+    // 生成方差
+    const variance = Array.from({ length: numArms }, () => Math.floor(getRandomNumber(1, 10)));
+
+    return { ExpectedRewards, variance };
+};
+
+
 
 const Bandit = () => {
-    const [rewards, setRewards] = useState(Array(NUM_ARMS).fill(0)); // 每个臂的累计奖励
+    const [numArms, setNumArms] = useState(INIT_NUM_ARMS);
+    const [maxStep, setMaxStep] = useState(INIT_Max_STEP);
+    const numArmsRef = useRef(numArms);
+    const maxStepRef = useRef(maxStep);
+    const [ExpectedRewards, setExpectedRewards] = useState<number[]>([]);
+    const [variance, setVariance] = useState<number[]>([]);
+    const [rewards, setRewards] = useState(Array(INIT_NUM_ARMS).fill(0)); // 每个臂的累计奖励
     // 每个臂奖励的平方之和
-    const [rewardsSquareSum, setRewardsSquareSum] = useState(Array(NUM_ARMS).fill(0));
-    const [counts, setCounts] = useState(Array(NUM_ARMS).fill(0)); // 每个臂被点击的次数
-    const [rewardMatrix, setRewardMatrix] = useState(Array(NUM_ARMS).fill(0).map(() => Array(Max_STEP).fill(0))); // 每个臂每次点击的奖励
-    const totalCounts = counts.reduce((acc, count) => acc + count, 0);
-    const [rewardTrajectory, setRewardTrajectory] = useState(Array(Max_STEP).fill(0)); // 每次点击的奖励
-
+    const [rewardsSquareSum, setRewardsSquareSum] = useState(Array(INIT_NUM_ARMS).fill(0));
+    const [counts, setCounts] = useState(Array(INIT_NUM_ARMS).fill(0)); // 每个臂被点击的次数
+    const [rewardMatrix, setRewardMatrix] = useState(Array(INIT_NUM_ARMS).fill(0).map(() => Array(INIT_Max_STEP).fill(0)).map(
+        (row, i) => row.map((_, j) => sampleReward(ExpectedRewards[i], variance[i]))
+    )); // 每个臂每次点击的奖励
+    const [totalCounts, setTotalCounts] = useState(0);
+    const [rewardTrajectory, setRewardTrajectory] = useState(Array(INIT_Max_STEP).fill(0)); // 每次点击的奖励
+    const [isStart, setIsStart] = useState(false);
     const [messageApi, contextHolder] = message.useMessage();
+    // const ucbValue = rewards.map((reward, i) => {
+    //     const averageReward = counts[i] > 0 ? reward / counts[i] : 0;
+    //     const explorationTerm = counts[i] > 0 ? para_C * Math.sqrt((2 * Math.log(totalCounts)) / counts[i]) : Infinity;
+    //     return averageReward + explorationTerm;
+    // })
+    const [ucbValue, setUcbValue] = useState(Array(INIT_NUM_ARMS).fill(Infinity));
+    // randomIndex 初始化为随机的一个arm
+    const [randomIndex, setRandomIndex] = useState(Math.floor(Math.random() * numArms));
 
-    // 创建表格数据
-    const data = Array.from({ length: totalCounts }, (_, step) => ({
-        key: step + 1,
-        step: (step + 1).toString(),
-        reward: rewardTrajectory[step].toFixed(2) || 0,
-    }));
+    // const maxUCBValue = Math.max(...ucbValue);
+    // // 找到所有最大值的索引
+    // const maxIndices = ucbValue
+    //     .map((value, index) => (value === maxUCBValue ? index : -1))
+    //     .filter(index => index !== -1);
+    // // 随机选择一个索引
+    // const randomIndex = maxIndices[Math.floor(Math.random() * maxIndices.length)];
 
-    // 计算均值
+
+    const handleNumArmsChange = (value: any) => {
+        numArmsRef.current = value; // 更新 ref 中的值
+    };
+
+    const handleMaxStepChange = (value: any) => {
+        maxStepRef.current = value; // 更新 ref 中的值
+    };
+
+    useEffect(() => {
+        // 当 numArms 变化时，更新 rewards 的状态
+        setRewards(Array(numArms).fill(0));
+        setRewardsSquareSum(Array(numArms).fill(0));
+        setCounts(Array(numArms).fill(0));
+        const { ExpectedRewards, variance } = generateExpectedRewardsAndVariance(numArms);
+        setExpectedRewards(ExpectedRewards);
+        setVariance(variance);
+        setRewardMatrix(Array(numArms).fill(0).map(() => Array(maxStep).fill(0)).map(
+            (row, i) => row.map((_, j) => sampleReward(ExpectedRewards[i], variance[i]))
+        ));
+    }, [numArms]);
+
+    useEffect(() => {
+        // 当 maxStep 变化时，更新 rewardTrajectory 的状态
+        setRewardTrajectory(Array(maxStep).fill(0));
+        setRewardMatrix(Array(numArms).fill(0).map(() => Array(maxStep).fill(0)).map(
+            (row, i) => row.map((_, j) => sampleReward(ExpectedRewards[i], variance[i]))
+        ));
+    }, [maxStep]);
+
+    useEffect(() => {
+        setTotalCounts(counts.reduce((acc, count) => acc + count, 0));
+        const _ucbValue = rewards.map((reward, i) => {
+            const averageReward = counts[i] > 0 ? reward / counts[i] : 0;
+            const explorationTerm = counts[i] > 0 ? para_C * Math.sqrt((2 * Math.log(totalCounts+1)) / counts[i]) : Infinity;
+            return averageReward + explorationTerm;
+        });
+        setUcbValue(_ucbValue);
+        // 找到所有最大值的索引, 并将randomIndex设置为其中一个
+        const maxUCBValue = Math.max(..._ucbValue);
+        const maxIndices = _ucbValue
+            .map((value, index) => (value === maxUCBValue ? index : -1))
+            .filter(index => index !== -1);
+        setRandomIndex(maxIndices[Math.floor(Math.random() * maxIndices.length)]);
+        // 输出每个 arm 的 ucb value
+        console.log(_ucbValue);
+    }, [counts]);
+
+    // 计算总奖励
     const totalReward = rewardTrajectory.reduce((acc, reward) => acc + reward, 0).toFixed(2);
 
-    // 添加均值行
-    data.push({
-        key: totalCounts + 1,
-        step: "Total",
-        reward: totalReward,
-    });
-
-    const columns = [
-        {
-            title: 'Step',
-            dataIndex: 'step',
-            key: 'step',
-        },
-        {
-            title: 'Reward',
-            dataIndex: 'reward',
-            key: 'reward',
-        },
-    ];
-
     const handleArmClick = (armIndex: number) => {
-        if (totalCounts >= Max_STEP) {
+        if (totalCounts >= maxStep) {
             messageApi.open({
                 type: 'error',
-                content: `已达到最大步数上限 ${Max_STEP}，请点击“Clear output”清除。`,
+                content: `已达到最大步数上限 ${maxStep}，请点击“Clear output”清除。`,
             });
             return;
         }
@@ -83,7 +159,6 @@ const Bandit = () => {
             newRewardTrajectory[totalCounts] = reward;
             return newRewardTrajectory;
         });
-        console.log(`Arm ${armIndex + 1} Reward: ${reward}`);
 
         setRewards(prevRewards => {
             const newRewards = [...prevRewards];
@@ -103,21 +178,24 @@ const Bandit = () => {
     };
 
     const handleClearOutput = () => {
-        setRewards(Array(NUM_ARMS).fill(0));
-        setRewardsSquareSum(Array(NUM_ARMS).fill(0));
-        setCounts(Array(NUM_ARMS).fill(0));
-        setRewardTrajectory(Array(Max_STEP).fill(0));
+        setRewards(Array(numArms).fill(0));
+        setRewardsSquareSum(Array(numArms).fill(0));
+        setCounts(Array(numArms).fill(0));
+        setRewardTrajectory(Array(maxStep).fill(0));
     };
     
     const handleStartGame = () => {
+        setNumArms(numArmsRef.current);
+        setMaxStep(maxStepRef.current);
         handleClearOutput();
-        const newRewardMatrix = rewardMatrix.map((armRewards, armIndex) => {
-            return armRewards.map((_, stepIndex) => {
-              return sampleReward(ExpectedRewards[armIndex], variance[armIndex]);
-            });
-          });
-        
-        setRewardMatrix(newRewardMatrix);
+        setIsStart(true);
+        const { ExpectedRewards, variance } = generateExpectedRewardsAndVariance(numArms);
+        setExpectedRewards(ExpectedRewards);
+        setVariance(variance);
+        setRewardMatrix(Array(numArms).fill(0).map(() => Array(maxStep).fill(0)).map(
+            (row, i) => row.map((_, j) => sampleReward(ExpectedRewards[i], variance[i]))
+        ));
+        setRandomIndex(Math.floor(Math.random() * numArms));
     };
 
     // 配置 ECharts 图表选项
@@ -157,7 +235,7 @@ const Bandit = () => {
             },
             xAxis: {
                 type: 'category',
-                data: ['Arm 1', 'Arm 2', 'Arm 3'],
+                data: Array.from({ length: numArms }, (_, i) => `Arm${i + 1}`),
             },
             yAxis: {
                 type: 'value',
@@ -229,25 +307,89 @@ const Bandit = () => {
         };
     };
 
+    const items: DescriptionsProps['items'] = [
+        {
+            key: '1',
+            label: 'Total steps',
+            children: totalCounts,
+        },
+        {
+            key: '2',
+            label: 'Total reward',
+            children: totalReward,
+        }
+    ]
+
+    const columns = [
+        {
+            title: 'Arm',
+            dataIndex: 'arm',
+            key: 'arm',
+        },
+        {
+            title: 'Expected Reward',
+            dataIndex: 'expectedReward',
+            key: 'expectedReward',
+        },
+        {
+            title: 'Variance',
+            dataIndex: 'variance',
+            key: 'variance',
+        },
+    ];
+
+    const data = ExpectedRewards.map((reward, index) => ({
+        key: index,
+        arm: `Arm ${index + 1}`,
+        expectedReward: reward.toFixed(2),
+        variance: variance[index]?.toFixed(2) || 0,
+    }));
+
+    // Drawer 相关
+    const [open, setOpen] = useState(false);
+
+    const showDrawer = () => {
+        setOpen(true);
+    };
+
+    const onClose = () => {
+        setOpen(false);
+    };
+
     return (
-        <div className="slot-machine-frame" style={{ padding: '20px 300px' , display: 'flex', gap: '60px' }}>
+        <div className="slot-machine-frame" style={{ padding: '20px 300px'}}>
+            {contextHolder}
             <div>
                 <Title level={1} style={{ /*居中 */ textAlign: 'center' }}>Multi-Armed Bandit</Title>
                 <Row gutter={16} justify="center">
+                    <Col span={8}>
+                        <InputNumber addonBefore={"设置 Arm 个数"}  defaultValue={numArms} onChange={handleNumArmsChange} min={1} max={20}/>
+                    </Col>
+                    <Col span={8}>
+                        <InputNumber addonBefore={"设置最大 Step"}  defaultValue={maxStep} onChange={handleMaxStepChange} min={1} />
+                    </Col>
+                </Row>
+                <div style={{ marginBottom: '20px' }} /> {/* 添加间距 */}
+                <Row gutter={16} justify="center">
                     <Col span={4}>
                         <Button type="primary" size="large" onClick={handleStartGame}>
-                            Start game
+                            {isStart ? 'Restart game' : 'Start game'}
                         </Button>
                     </Col>
                     <Col span={4}>
-                        <Button type="primary" size="large" onClick={handleClearOutput}>
+                        <Button type="primary" size="large" onClick={handleClearOutput} disabled={!isStart}>
                             Clear output
+                        </Button>
+                    </Col>
+                    <Col span={4}>
+                        <Button type="primary" size="large" onClick={showDrawer} disabled={!isStart}>
+                            Show details
                         </Button>
                     </Col>
                 </Row>
                 <Divider />
                 <Row gutter={16}>
-                    {Array(NUM_ARMS).fill(null).map((_, i) => (
+                    {Array(numArms).fill(null).map((_, i) => (
                         <Col span={8} key={i}>
                             <Button
                                 type="primary"
@@ -255,37 +397,39 @@ const Bandit = () => {
                                 className="slot-button"
                                 onClick={() => handleArmClick(i)}
                                 style={{ marginBottom: '10px' }}
+                                disabled={!isStart}
                             >
                                 Arm {i + 1}
+                                {i === randomIndex && isStart && <Tag color="green">UCB prefer</Tag>}
                             </Button>
                         </Col>
                     ))}
                 </Row>
 
                 <div style={{ marginTop: '20px' }}>
-                    <Title level={2}>Statistics:</Title>
-                    <div style={{ display: 'flex', gap: '10px', overflowX: 'auto' }}>
+                    <Descriptions title="Statistics" bordered items={items} />
+                    <div style={{ marginBottom: '20px' }} /> {/* 添加间距 */}
+                    <Row gutter={[16, 16]}>
                         {rewards.map((reward, i) => (
-                            <Card
-                                key={i}
-                                title={`Arm ${i + 1}`}
-                                style={{ flex: '0 0 auto', width: '300px' }} // 控制每个卡片的宽度
-                            >
-                                <Paragraph>
-                                    {counts[i]} pulls, Average reward: {counts[i] > 0 ? (reward / counts[i]).toFixed(2) : 0}
-                                </Paragraph>
-                            </Card>
+                            <Col key={i} span={8}> {/* 这里的 span 可以根据需求调整 */}
+                                <Card title={`Arm ${i + 1}`}>
+                                    <Paragraph>
+                                        {counts[i]} pulls, Average reward: {counts[i] > 0 ? (reward / counts[i]).toFixed(2) : 0}
+                                    </Paragraph>
+                                </Card>
+                            </Col>
                         ))}
-                    </div>
+                    </Row>
 
                     <div style={{ marginTop: '30px' }}>
                         <ReactECharts option={getOption()} />
                     </div>
                 </div>
             </div>
-            <div>
-                <Table columns={columns} dataSource={data} pagination={false} />
-            </div>
+            
+            <Drawer title="Details" onClose={onClose} open={open}>
+                <Table columns={columns} dataSource={data} pagination={false} style={{ marginTop: '20px' }} />
+            </Drawer>
         </div>
     );
 };
