@@ -1,17 +1,17 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, Card, Typography, Row, Col, Divider, Table, message, InputNumber, Descriptions, Drawer, Tag} from 'antd';
+import { Button, Card, Typography, Row, Col, Divider, Table, message, InputNumber, Descriptions, Drawer, Tag, Checkbox } from 'antd';
 import 'antd/dist/reset.css'; // 引入 Ant Design 样式
 import ReactECharts from 'echarts-for-react';
 import './styles.css';
-import type { DescriptionsProps } from 'antd';
+import type { DescriptionsProps, CheckboxProps } from 'antd';
 
 const { Title, Paragraph } = Typography;
 
 const INIT_NUM_ARMS = 3;
-const INIT_Max_STEP = 30; // 最大步数
-const para_C = 1; // UCB 算法的参数
+const INIT_Max_STEP = 40; // 最大步数
+const para_C = 5; // UCB 算法的参数
 
 function sampleReward(mean: number, stdDev: number): number {
     // Box-Muller transform to generate a random number from a normal distribution
@@ -28,7 +28,7 @@ function sampleReward(mean: number, stdDev: number): number {
 const getRandomNumber = (min: number, max: number) => Math.random() * (max - min) + min;
 
 const generateExpectedRewardsAndVariance = (numArms: number) => {
-    let ExpectedRewards = [];
+    const ExpectedRewards = [];
     let maxReward = 0, secondMaxReward = 0;
 
     // 生成期望奖励
@@ -45,14 +45,19 @@ const generateExpectedRewardsAndVariance = (numArms: number) => {
         }
     }
 
-    // 确保最大和第二大之间的差值在 0.5 - 1 之间
-    if (maxReward - secondMaxReward < 1 || maxReward - secondMaxReward > 2) {
-        const targetDifference = getRandomNumber(1, 2);
+    const indexOfMaxReward = ExpectedRewards.indexOf(maxReward);
+    const indexOfSecondReward = ExpectedRewards.indexOf(secondMaxReward);
+
+    // 确保最大和第二大之间的差值在 1 - 2 之间
+    if (maxReward - secondMaxReward < 0.5 || maxReward - secondMaxReward > 1) {
+        const targetDifference = getRandomNumber(0.5, 1);
         ExpectedRewards[ExpectedRewards.indexOf(maxReward)] = secondMaxReward + targetDifference;
     }
 
     // 生成方差
     const variance = Array.from({ length: numArms }, () => Math.floor(getRandomNumber(1, 10)));
+    variance[indexOfMaxReward] = 10;
+    variance[indexOfSecondReward] = 10;
 
     return { ExpectedRewards, variance };
 };
@@ -85,6 +90,7 @@ const Bandit = () => {
     const [ucbValue, setUcbValue] = useState(Array(INIT_NUM_ARMS).fill(Infinity));
     // randomIndex 初始化为随机的一个arm
     const [randomIndex, setRandomIndex] = useState(Math.floor(Math.random() * numArms));
+    const [checkbox, setCheckBox] = useState(false)
 
     // const maxUCBValue = Math.max(...ucbValue);
     // // 找到所有最大值的索引
@@ -356,6 +362,11 @@ const Bandit = () => {
         setOpen(false);
     };
 
+    // checkbox 相关
+    const handleCheckbox: CheckboxProps['onChange'] = (e) => {
+        setCheckBox(e.target.checked);
+    };
+
     return (
         <div className="slot-machine-frame" style={{ padding: '20px 300px'}}>
             {contextHolder}
@@ -370,7 +381,7 @@ const Bandit = () => {
                     </Col>
                 </Row>
                 <div style={{ marginBottom: '20px' }} /> {/* 添加间距 */}
-                <Row gutter={16} justify="center">
+                <Row gutter={16} justify="center" align="middle">
                     <Col span={4}>
                         <Button type="primary" size="large" onClick={handleStartGame}>
                             {isStart ? 'Restart game' : 'Start game'}
@@ -386,6 +397,9 @@ const Bandit = () => {
                             Show details
                         </Button>
                     </Col>
+                    <Col span={4}>
+                        <Checkbox onChange={handleCheckbox}>开启推荐</Checkbox>
+                    </Col>
                 </Row>
                 <Divider />
                 <Row gutter={16}>
@@ -400,7 +414,7 @@ const Bandit = () => {
                                 disabled={!isStart}
                             >
                                 Arm {i + 1}
-                                {i === randomIndex && isStart && <Tag color="green">UCB prefer</Tag>}
+                                {i === randomIndex && isStart && checkbox && <Tag color="green">UCB prefer</Tag>}
                             </Button>
                         </Col>
                     ))}
