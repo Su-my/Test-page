@@ -91,6 +91,8 @@ const Bandit = () => {
     // randomIndex 初始化为随机的一个arm
     const [randomIndex, setRandomIndex] = useState(Math.floor(Math.random() * numArms));
     const [checkbox, setCheckBox] = useState(false)
+    const [showDetails, setShowDetails] = useState(false);
+    const [optimalTotalReward, setOptimalTotalReward] = useState(0);
 
     // const maxUCBValue = Math.max(...ucbValue);
     // // 找到所有最大值的索引
@@ -108,6 +110,30 @@ const Bandit = () => {
     const handleMaxStepChange = (value: any) => {
         maxStepRef.current = value; // 更新 ref 中的值
     };
+
+    useEffect(() => {
+        // rewardMatrix 中第一维表示每个臂，第二维表示每次点击的奖励
+        // 找出 rewardMatrix 中每次点击之后所有臂当中的最大值
+        console.log(rewardMatrix);
+        if(rewardMatrix)
+        {
+            const maxRewardSums = rewardMatrix.reduce((acc, rewards) => {
+                rewards.forEach((reward, index) => {
+                    if (acc[index] === undefined) {
+                        acc[index] = reward;
+                    } else {
+                        acc[index] = Math.max(acc[index], reward);
+                    }
+                });
+                return acc;
+            }, []).reduce((sum, maxReward) => sum + maxReward, 0);
+
+            setOptimalTotalReward(parseFloat(maxRewardSums.toFixed(2)));
+        } else {
+            setOptimalTotalReward(0);
+        }
+
+    }, [rewardMatrix]);
 
     useEffect(() => {
         // 当 numArms 变化时，更新 rewards 的状态
@@ -147,6 +173,14 @@ const Bandit = () => {
         // 输出每个 arm 的 ucb value
         console.log(_ucbValue);
     }, [counts]);
+
+    useEffect(() => {
+        if (totalCounts >= maxStep) {
+            setShowDetails(true);
+        } else {
+            setShowDetails(false);
+        }
+    }, [totalCounts]);
 
     // 计算总奖励
     const totalReward = rewardTrajectory.reduce((acc, reward) => acc + reward, 0).toFixed(2);
@@ -326,6 +360,23 @@ const Bandit = () => {
         }
     ]
 
+    const itemsDrawer: DescriptionsProps['items'] = [
+        {
+            key: '1',
+            label: 'Optimal total reward',
+            children: <div>{optimalTotalReward}</div>,
+        },
+        {
+            key: '2',
+            label: 'Realized Regret',
+            children: (
+                <div>
+                    {(optimalTotalReward - parseFloat(totalReward)).toFixed(2)}
+                </div>
+            ),
+        },
+    ]
+
     const columns = [
         {
             title: 'Arm',
@@ -393,7 +444,7 @@ const Bandit = () => {
                         </Button>
                     </Col>
                     <Col span={4}>
-                        <Button type="primary" size="large" onClick={showDrawer} disabled={!isStart}>
+                        <Button type="primary" size="large" onClick={showDrawer} disabled={!isStart || !showDetails}>
                             Show details
                         </Button>
                     </Col>
@@ -443,6 +494,7 @@ const Bandit = () => {
             
             <Drawer title="Details" onClose={onClose} open={open}>
                 <Table columns={columns} dataSource={data} pagination={false} style={{ marginTop: '20px' }} />
+                <Descriptions bordered items={itemsDrawer} column = {1}/>
             </Drawer>
         </div>
     );
