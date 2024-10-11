@@ -465,7 +465,7 @@ const Bandit = () => {
                                 disabled={!isStart}
                             >
                                 Arm {i + 1}
-                                {i === randomIndex && isStart && checkbox && <Tag color="green">UCB prefer</Tag>}
+                                {i === randomIndex && isStart && checkbox && <Tag color="green">preferred</Tag>}
                             </Button>
                         </Col>
                     ))}
